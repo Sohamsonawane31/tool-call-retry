@@ -136,23 +136,29 @@ class RetryPolicy:
     ) -> bool:
         """Whether ``exc`` justifies another attempt.
 
-        HTTP-shaped errors are classified by status: 429 and 5xx are transient,
-        every other 4xx is terminal. Explicit ``NonRetryableError`` and
-        ``ToolCallError(retryable=False)`` always win over type membership.
+        Order of precedence (highest first):
+        1. KeyboardInterrupt / SystemExit / CancelledError — never retryable.
+        2. ``ToolCallError`` — its explicit ``retryable`` flag wins over the
+           spec (a default entry must not flip a per-instance False to True).
+        3. ``retryable_exceptions`` — the user's explicit config can make a 4xx
+           retryable, overriding the HTTP status default (#20).
+        4. HTTP-shaped errors classified by status: 429 and 5xx are transient,
+           every other 4xx is terminal.
+        5. ``NonRetryableError`` — always False.
         """
         if attempt is not None and attempt >= self.max_attempts:
             return False
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, asyncio.CancelledError)):
+            return False
+        if isinstance(exc, ToolCallError):
+            return bool(exc.retryable)
+        if self._matches_retryable_spec(exc):
+            return True
         # HTTP status must be checked before NonRetryableError: an HTTPStatusError
         # subclasses NonRetryableError to be a *default*, but 429/5xx are transient.
         if isinstance(exc, HTTPStatusError):
             return bool(exc.retryable)
-        if isinstance(exc, NonRetryableError):
-            return False
-        if isinstance(exc, ToolCallError):
-            return bool(exc.retryable)
-        if isinstance(exc, (KeyboardInterrupt, SystemExit, asyncio.CancelledError)):
-            return False
-        return self._matches_retryable_spec(exc)
+        return False
 
     def _matches_retryable_spec(self, exc: BaseException) -> bool:
         spec = self.retryable_exceptions

@@ -110,6 +110,19 @@ def test_custom_retryable_types_override_defaults():
     assert policy.is_retryable(TimeoutError()) is False
 
 
+def test_retryable_exceptions_can_make_4xx_retryable():
+    """#20: ``retryable_exceptions`` is consulted *before* the HTTP status check."""
+    policy = RetryPolicy(retryable_exceptions=(HTTPStatusError,))
+    assert policy.is_retryable(HTTPStatusError(404, "Not Found")) is True
+
+
+def test_tool_call_error_retryable_false_wins_over_spec():
+    """A per-instance ``retryable=False`` must not be flipped by a default entry."""
+    policy = RetryPolicy(retryable_exceptions=(ToolCallError,))
+    assert policy.is_retryable(ToolCallError("bad", retryable=False)) is False
+    assert policy.is_retryable(ToolCallError("transient", retryable=True)) is True
+
+
 def test_run_returns_first_success_without_sleeping():
     slept = []
     policy = RetryPolicy(base_delay=0.1)
