@@ -98,6 +98,14 @@ def test_retryable_error_subclass_is_retryable_and_non_retryable_is_not():
     assert RetryPolicy().is_retryable(NonRetryableError("never")) is False
 
 
+def test_http_status_error_stays_retryable_despite_terminal_base_class():
+    """HTTPStatusError subclasses NonRetryableError but 429/5xx are transient."""
+    policy = RetryPolicy()
+    assert policy.is_retryable(HTTPStatusError(429, "Too Many Requests")) is True
+    assert policy.is_retryable(HTTPStatusError(503, "Unavailable")) is True
+    assert policy.is_retryable(HTTPStatusError(404, "Not Found")) is False
+
+
 def test_is_retryable_honours_attempt_budget():
     policy = RetryPolicy(max_attempts=2)
     assert policy.is_retryable(TimeoutError(), attempt=1) is True

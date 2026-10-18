@@ -23,7 +23,6 @@ from typing import Any
 
 from tool_call_retry.errors import (
     HTTPStatusError,
-    NonRetryableError,
     RetryableError,
     RetryExhausted,
     ToolCallError,
@@ -144,7 +143,11 @@ class RetryPolicy:
            retryable, overriding the HTTP status default (#20).
         4. HTTP-shaped errors classified by status: 429 and 5xx are transient,
            every other 4xx is terminal.
-        5. ``NonRetryableError`` — always False.
+
+        ``NonRetryableError`` is deliberately **not** an unconditional terminal
+        marker: ``retryable_exceptions`` (rule 3) is consulted before any type
+        default, so listing it there makes a terminal failure retryable. See
+        BACKLOG.md — resolving that against the README table needs a design call.
         """
         if attempt is not None and attempt >= self.max_attempts:
             return False
