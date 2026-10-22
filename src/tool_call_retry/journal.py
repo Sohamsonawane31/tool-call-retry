@@ -609,7 +609,12 @@ def _iso(value: float | None) -> str:
 
     if not value:
         return datetime.now(timezone.utc).isoformat()
-    return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
+    try:
+        return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
+    except (OverflowError, OSError, ValueError):
+        # Corrupted / out-of-range journal timestamps must not crash load_saga
+        # (status/recover/journal). Fall back to "now", same as a missing value.
+        return datetime.now(timezone.utc).isoformat()
 
 
 def saga_id_for_key(idempotency_key: str) -> str:
