@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from tool_call_retry.cli import main
+from tool_call_retry.cli import ConfigError, load_callable, main
 from tool_call_retry.journal import SagaJournal
 
 TOOLS_MODULE = """
@@ -319,3 +319,34 @@ def test_unknown_subcommand_exits_2(capsys):
     with pytest.raises(SystemExit) as excinfo:
         main(["frobnicate"])
     assert excinfo.value.code == 2
+
+
+def test_load_callable_resolves_builtin():
+    assert load_callable("len") is len
+    assert load_callable("min") is min
+
+
+def test_load_callable_rejects_unknown_bare_name():
+    with pytest.raises(ConfigError) as excinfo:
+        load_callable("no_such_builtin")
+    assert "no_such_builtin" in str(excinfo.value)
+
+
+def test_load_callable_rejects_non_callable_builtin():
+    with pytest.raises(ConfigError) as excinfo:
+        load_callable("__doc__")
+    assert "not callable" in str(excinfo.value)
+
+
+def test_run_with_builtin_callable(tmp_path, capsys):
+    db = tmp_path / "saga.db"
+    config = write_config(
+        tmp_path / "saga.yml",
+        [{"name": "make_dict", "do": "dict", "args": {"a": 1}}],
+        journal=str(db),
+    )
+    code = main(["run", "--config", str(config), "--json"])
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "completed"
+    assert payload["steps"][0]["result"] == {"a": 1}

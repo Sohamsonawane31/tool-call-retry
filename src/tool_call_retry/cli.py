@@ -9,6 +9,7 @@ Exit codes: ``0`` success, ``1`` saga failure, ``2`` CLI misuse.
 from __future__ import annotations
 
 import argparse
+import builtins
 import importlib
 import json
 import sys
@@ -34,7 +35,14 @@ class ConfigError(Exception):
 def load_callable(target: str) -> Any:
     """Resolve a ``module:function`` string (or a builtin name) to a callable."""
     if ":" not in target:
-        raise ConfigError(f"step target {target!r} must use 'module:function' syntax")
+        func = getattr(builtins, target, None)
+        if func is None:
+            raise ConfigError(
+                f"step target {target!r} must use 'module:function' syntax or name a builtin"
+            )
+        if not callable(func):
+            raise ConfigError(f"{target!r} is not callable")
+        return func
     module_name, _, attr = target.partition(":")
     if not module_name or not attr:
         raise ConfigError(f"step target {target!r} must use 'module:function' syntax")
